@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team 6 7 - Activity</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <div id="lobbyScreen" class="lobby-screen">
+      <div class="lobby-header">
+        <h1 id="activityTitle">Activity Name</h1>
+        <p id="activityInfo">Description</p>
+      </div>
+
+      <div class="players-section">
+        <div class="players-count">
+          <span class="current-count" id="currentPlayers">0</span>
+          <span> / </span>
+          <span class="max-count" id="maxPlayers">2</span>
+          <span> Players</span>
+        </div>
+
+        <div class="players-list" id="playerList">
+          <div class="waiting-message">Waiting for players...</div>
+        </div>
+      </div>
+
+      <div class="lobby-status">
+        <div class="status-indicator" id="statusIndicator">
+          <span class="status-dot"></span>
+          <span class="status-text">Waiting for players...</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="gameScreen" class="game-screen" style="display: none;">
+      <div class="game-header">
+        <h1 id="gameTitle">Game Started!</h1>
+        <button id="leaveGameBtn" class="btn-secondary">Leave Game</button>
+      </div>
+
+      <div class="game-content">
+        <div class="game-info">
+          <p>Activity: <span id="gameActivityName"></span></p>
+          <p>Players: <span id="gamePlayerCount"></span></p>
+          <p>Started at: <span id="gameStartTime"></span></p>
+        </div>
+
+        <div class="game-players" id="gamePlayers">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="data/activities.js"></script>
+  <script src="modules/auth.js"></script>
+  <script src="modules/matchmaking.js"></script>
+
+  <script>
+    const profile = loadProfile();
+    if (!profile) {
+      window.location.href = "index.html";
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const activityId = urlParams.get('activity');
+    const roomId = urlParams.get('room');
+
+    let currentLobby = null;
+    let lobbyPlayers = {};
+
+    function initializeLobby() {
+      const activity = allActivities.find(a => a.id === activityId);
+      if (!activity) {
+        alert('Activity not found!');
+        window.location.href = 'game.html';
+        return;
+      }
+
+      document.getElementById('activityTitle').textContent = activity.name;
+      document.getElementById('activityInfo').textContent = activity.description;
+      document.getElementById('maxPlayers').textContent = activity.maxPlayers;
+
+      joinLocalLobby(activityId, activity.maxPlayers);
+    }
+
+    function joinLocalLobby(activityId, maxPlayers) {
+      const lobbyKey = `lobby_${activityId}`;
+      let lobbyData = JSON.parse(localStorage.getItem(lobbyKey) || '{"players":{}}');
+
+      if (!lobbyData.players[profile.id]) {
+        lobbyData.players[profile.id] = {
+          id: profile.id,
+          username: profile.username,
+          country: profile.country,
+          avatar: profile.avatarUrl,
+          language: profile.language,
+          joinedAt: Date.now()
+        };
+      }
+
+      lobbyPlayers = lobbyData.players;
+      localStorage.setItem(lobbyKey, JSON.stringify(lobbyData));
+      currentLobby = lobbyKey;
+
+      renderLobby();
+      checkLobbyStatus(maxPlayers);
+
+      setInterval(() => {
+        checkForNewPlayers(maxPlayers);
+      }, 1000);
+    }
+
+    function checkForNewPlayers(maxPlayers) {
+      if (!currentLobby) return;
+
+      const lobbyData = JSON.parse(localStorage.getItem(currentLobby) || '{"players":{}}');
+      const newPlayers = Object.keys(lobbyData.players).filter(id => !lobbyPlayers[id]);
+
+      if (newPlayers.length > 0 || Object.keys(lobbyData.players).length !== Object.keys(lobbyPlayers).length) {
+        lobbyPlayers = lobbyData.players;
+        renderLobby();
+        checkLobbyStatus(maxPlayers);
+      }
+    }
+
+    function renderLobby() {
+      const playerListEl = document.getElementById('playerList');
+      const currentCountEl = document.getElementById('currentPlayers');
+      const players = Object.values(lobbyPlayers);
+
+      currentCountEl.textContent = players.length;
+
+      if (players.length === 0) {
+        playerListEl.innerHTML = '<div class="waiting-message">Waiting for players...</div>';
+      } else {
+        playerListEl.innerHTML = players.map(player => `
+          <div class="player-card">
+            <img src="${player.avatar}" class="player-avatar" alt="${player.username}" />
+            <div class="player-info">
+              <span class="player-name">${player.username}</span>
+              <span class="player-country">${player.country}</span>
+            </div>
+            <span class="player-status">Ready</span>
+          </div>
+        `).join('');
+      }
+    }
+
+    function checkLobbyStatus(maxPlayers) {
+      const playerCount = Object.keys(lobbyPlayers).length;
+      const statusIndicator = document.getElementById('statusIndicator');
+      const statusDot = statusIndicator.querySelector('.status-dot');
+      const statusText = statusIndicator.querySelector('.status-text');
+
+      if (playerCount >= 2) {
+        statusDot.className = 'status-dot green';
+        statusText.textContent = `Ready to start! (${playerCount}/${maxPlayers} players)`;
+
+        if (playerCount >= 2 && !document.getElementById('startGameBtn')) {
+          const startBtn = document.createElement('button');
+          startBtn.id = 'startGameBtn';
+          startBtn.className = 'btn-primary';
+          startBtn.textContent = 'Start Game!';
+          startBtn.onclick = () => startGame();
+          statusIndicator.appendChild(startBtn);
+        }
+      } else {
+        statusDot.className = 'status-dot yellow';
+        statusText.textContent = `Waiting for players... (${playerCount}/${maxPlayers})`;
+        const startBtn = document.getElementById('startGameBtn');
+        if (startBtn) startBtn.remove();
+      }
+    }
+
+    function startGame() {
+      const activity = allActivities.find(a => a.id === activityId);
+      const players = Object.values(lobbyPlayers);
+
+      document.getElementById('lobbyScreen').style.display = 'none';
+      document.getElementById('gameScreen').style.display = 'block';
+
+      document.getElementById('gameTitle').textContent = `${activity.name} Started!`;
+      document.getElementById('gameActivityName').textContent = activity.name;
+      document.getElementById('gamePlayerCount').textContent = players.length;
+      document.getElementById('gameStartTime').textContent = new Date().toLocaleTimeString();
+
+      const gamePlayersEl = document.getElementById('gamePlayers');
+      gamePlayersEl.innerHTML = players.map(player => `
+        <div class="game-player-card">
+          <img src="${player.avatar}" class="game-player-avatar" alt="${player.username}" />
+          <span class="game-player-name">${player.username}</span>
+          <span class="game-player-country">${player.country}</span>
+        </div>
+      `).join('');
+
+      if (document.getElementById('startGameBtn')) {
+        document.getElementById('startGameBtn').remove();
+      }
+    }
+
+    document.getElementById('leaveGameBtn').onclick = () => {
+      if (confirm('Are you sure you want to leave the game?')) {
+        if (currentLobby) {
+          const lobbyData = JSON.parse(localStorage.getItem(currentLobby) || '{"players":{}}');
+          delete lobbyData.players[profile.id];
+          localStorage.setItem(currentLobby, JSON.stringify(lobbyData));
+        }
+        window.location.href = 'game.html';
+      }
+    };
+
+    initializeLobby();
+  </script>
+</body>
+</html>

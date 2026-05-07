@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team 6 7 - Main Menu</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <img id="userAvatar" src="" alt="User Avatar" />
+      <div class="user-info">
+        <h1 id="welcomeMessage">Welcome to Team 6 7!</h1>
+        <p id="userDetails"></p>
+      </div>
+      <button id="logoutBtn">Logout</button>
+    </header>
+
+    <main>
+      <button id="randomCultureBtn" class="main-btn">🌍 Random Culture Activity</button>
+      <button id="findActivityBtn" class="main-btn">🎯 Find Activity</button>
+      <button id="statsBtn" class="main-btn">📊 My Statistics</button>
+      <button id="settingsBtn" class="main-btn">⚙️ Settings</button>
+    </main>
+
+    <div id="activityModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Choose Activity</h2>
+
+        <div class="category-tabs">
+          <button class="tab active" data-category="culture">🌍 Culture (Random)</button>
+          <button class="tab" data-category="hobby">🎯 Hobbies (Choose)</button>
+        </div>
+
+        <input type="text" id="activitySearch" placeholder="Search activity..." />
+
+        <div id="activityList"></div>
+      </div>
+    </div>
+
+    <div id="statsModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>My Statistics</h2>
+        <div id="statsContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="data/activities.js"></script>
+  <script src="modules/auth.js"></script>
+  <script src="modules/matchmaking.js"></script>
+
+  <script>
+    const profile = loadProfile();
+    if (!profile) {
+      window.location.href = "index.html";
+    }
+
+    document.getElementById("userAvatar").src = profile.avatarUrl;
+    document.getElementById("welcomeMessage").textContent = `Welcome, ${profile.username}!`;
+    document.getElementById("userDetails").textContent = `${profile.country} | ${profile.language} | Age: ${profile.age}`;
+
+    document.getElementById("logoutBtn").onclick = () => {
+      logout();
+    };
+
+    document.getElementById("randomCultureBtn").onclick = () => {
+      joinRandomCultureActivity();
+    };
+
+    document.getElementById("findActivityBtn").onclick = () => {
+      document.getElementById("activityModal").style.display = "block";
+      renderActivities("culture");
+    };
+
+    document.getElementById("statsBtn").onclick = () => {
+      document.getElementById("statsModal").style.display = "block";
+      renderStats();
+    };
+
+    function joinRandomCultureActivity() {
+      const randomActivities = cultureActivities.filter(a => a.isRandom);
+      const randomActivity = randomActivities[Math.floor(Math.random() * randomActivities.length)];
+      const randomSubtype = randomActivity.mechanics.subtypes[Math.floor(Math.random() * randomActivity.mechanics.subtypes.length)];
+
+      const confirmMsg = `Random Culture Activity Selected!\n\n${randomActivity.name}: ${randomSubtype.name}\nCountry: ${randomSubtype.country}\n\nDo you want to join?`;
+
+      if (confirm(confirmMsg)) {
+        alert(`Joining ${randomActivity.name}: ${randomSubtype.name} from ${randomSubtype.country}! Waiting for other players.`);
+        window.location.href = `activity.html?activity=${randomActivity.id}`;
+      }
+    }
+
+    document.querySelectorAll(".close").forEach(closeBtn => {
+      closeBtn.onclick = () => {
+        closeBtn.closest(".modal").style.display = "none";
+      };
+    });
+
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.onclick = () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        renderActivities(tab.dataset.category);
+      };
+    });
+
+    document.getElementById("activitySearch").oninput = (e) => {
+      const searchTerm = e.target.value.toLowerCase();
+      const activeCategory = document.querySelector(".tab.active").dataset.category;
+      renderActivities(activeCategory, searchTerm);
+    };
+
+    function renderActivities(category, searchTerm = "") {
+      let activities;
+      switch (category) {
+        case "culture":
+          activities = cultureActivities.filter(a => !a.isRandom);
+          break;
+        case "hobby":
+          activities = hobbyActivities;
+          break;
+      }
+
+      const filtered = activities.filter(a =>
+        a.name.toLowerCase().includes(searchTerm) ||
+        a.description.toLowerCase().includes(searchTerm)
+      );
+
+      const list = document.getElementById("activityList");
+      list.innerHTML = filtered.map(a => `
+        <div class="activity-card">
+          <h3>${a.name}</h3>
+          <p>${a.description}</p>
+          <p class="activity-meta">Players: ${a.maxPlayers} | Duration: ${Math.floor(a.duration / 60)} min | Difficulty: ${a.difficulty}</p>
+          <button class="join-btn" onclick="joinActivity('${a.id}')">Join</button>
+        </div>
+      `).join("");
+    }
+
+    function joinActivity(activityId) {
+      const activity = allActivities.find(a => a.id === activityId);
+      if (activity) {
+        if (activity.isRandom) {
+          const randomSubtype = activity.mechanics.subtypes[Math.floor(Math.random() * activity.mechanics.subtypes.length)];
+          alert(`Joining ${activity.name}: ${randomSubtype.name} from ${randomSubtype.country}! Waiting for other players.`);
+        } else {
+          alert(`Joining ${activity.name}... Waiting for other players.`);
+        }
+        window.location.href = `activity.html?activity=${activityId}`;
+      }
+    }
+
+    function renderStats() {
+      const stats = profile.stats;
+      const statsContent = document.getElementById("statsContent");
+
+      const activitiesCompleted = Object.entries(stats.activitiesCompleted).map(([id, count]) => {
+        const activity = allActivities.find(a => a.id === id);
+        return activity ? `<li>${activity.name}: ${count} times</li>` : '';
+      }).join('');
+
+      statsContent.innerHTML = `
+        <div class="stats-grid">
+          <div class="stat-item">
+            <h3>Games Played</h3>
+            <p>${stats.gamesPlayed}</p>
+          </div>
+          <div class="stat-item">
+            <h3>Total Score</h3>
+            <p>${stats.totalScore}</p>
+          </div>
+          <div class="stat-item">
+            <h3>Average Score</h3>
+            <p>${stats.gamesPlayed > 0 ? Math.round(stats.totalScore / stats.gamesPlayed) : 0}</p>
+          </div>
+        </div>
+        <div class="activities-completed">
+          <h3>Activities Completed</h3>
+          <ul>${activitiesCompleted || '<li>No activities completed yet</li>'}</ul>
+        </div>
+      `;
+    }
+
+    window.onclick = (e) => {
+      if (e.target.classList.contains("modal")) {
+        e.target.style.display = "none";
+      }
+    };
+  </script>
+</body>
+</html>
